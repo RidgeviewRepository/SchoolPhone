@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "ids": {
+      "$id": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "uid": { ".validate": "newData.isString()" },
+        "claimedAt": { ".validate": "newData.isNumber()" },
+        "lastActive": { ".validate": "newData.isNumber()" }
+      }
+    },
+
+    "messages": {
+      "$conversation": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+
+        "$msgId": {
+          ".validate": "newData.hasChildren(['from','to','text','timestamp']) && newData.child('from').isString() && newData.child('to').isString() && root.child('ids').child(newData.child('from').val()).exists() && ( newData.child('to').val() === 'global' || root.child('ids').child(newData.child('to').val()).exists() ) && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('timestamp').isNumber()"
+        }
+      }
+    }
+  }
+}

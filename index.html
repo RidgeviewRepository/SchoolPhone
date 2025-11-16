@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>School Text (4-Digit Messaging)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <main class="container">
+    <header>
+      <h1>School Text</h1>
+      <div id="my-id" class="chip">ID: —</div>
+    </header>
+
+    <section class="setup card">
+      <h2>Claim Your ID</h2>
+      <p>Your ID will be a unique unused 4-digit number.</p>
+      <button id="gen-btn">Generate My ID</button>
+      <div id="setup-msg" class="small muted"></div>
+    </section>
+
+    <section class="chat card">
+      <div class="chat-top">
+        <label>Conversation:
+          <select id="conv-select">
+            <option value="global">School (global)</option>
+          </select>
+        </label>
+        <button id="new-conv-btn">New Chat</button>
+      </div>
+
+      <div id="messages" class="messages"></div>
+
+      <form id="send-form" class="send-form">
+        <input id="text-input" placeholder="Type a message…" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
