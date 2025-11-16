@@ -15,12 +15,14 @@ import {
 const firebaseConfig = {
   apiKey: "AIzaSyBDSsUcnL_M9ive8QqykUopmdp-27W0GnE",
   authDomain: "schoolphone-ccbfb.firebaseapp.com",
+  databaseURL: "https://schoolphone-ccbfb-default-rtdb.firebaseio.com",
   projectId: "schoolphone-ccbfb",
   storageBucket: "schoolphone-ccbfb.firebasestorage.app",
   messagingSenderId: "1001388666054",
   appId: "1:1001388666054:web:84d2fb59f0849c90f9fbc7",
   measurementId: "G-71T5F62SH4"
 };
+
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
