@@ -1,7 +1,7 @@
 // Firebase SDK
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import {
-  getDatabase, ref, runTransaction, push, set, update,
+  getDatabase, ref, runTransaction, push, update,
   serverTimestamp, query, limitToLast, orderByChild, onValue
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 import {
@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
 /* ---------------------------------------------------
-   INSERT YOUR FIREBASE CONFIG HERE
+   Firebase Config  (FORMAT A)
 ---------------------------------------------------- */
 
 const firebaseConfig = {
@@ -22,16 +22,17 @@ const firebaseConfig = {
   measurementId: "G-71T5F62SH4"
 };
 
-
-
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
+/* ---------------------------------------------------
+   Variables
+---------------------------------------------------- */
+
 let myId = null;
 let myUid = null;
 
-// Elements
 const myIdEl = document.getElementById("my-id");
 const setupMsg = document.getElementById("setup-msg");
 const genBtn = document.getElementById("gen-btn");
@@ -41,66 +42,73 @@ const messagesEl = document.getElementById("messages");
 const sendForm = document.getElementById("send-form");
 const textInput = document.getElementById("text-input");
 
-// Sign in anonymously
+/* ---------------------------------------------------
+   Sign In Anonymous
+---------------------------------------------------- */
+
 signInAnonymously(auth);
-onAuthStateChanged(auth, user => { if(user) myUid = user.uid });
+onAuthStateChanged(auth, user => { 
+  if (user) myUid = user.uid; 
+});
 
-/* -----------------------------
-   ID Claiming (Unique 4-digit)
------------------------------- */
+/* ---------------------------------------------------
+   4-Digit ID Claim System
+---------------------------------------------------- */
 
-function pad4(n){ return String(n).padStart(4,"0"); }
+function pad4(n){ return String(n).padStart(4, "0"); }
 
-async function tryClaim(id){
+async function tryClaim(id) {
   const r = ref(db, `ids/${id}`);
+
   const tx = await runTransaction(r, current => {
-    if(current === null){
+    if (current === null) {
       return {
         uid: myUid,
         claimedAt: Date.now(),
         lastActive: Date.now()
       };
     }
-    return;
+    return; // already taken
   });
+
   return tx.committed;
 }
 
-async function generateId(){
+async function generateId() {
   genBtn.disabled = true;
-  setupMsg.textContent = "Searching for free ID…";
+  setupMsg.textContent = "Searching for an open ID…";
 
-  for(let i=0;i<20;i++){
-    const attempt = pad4(Math.floor(Math.random()*10000));
+  for (let i = 0; i < 30; i++) {
+    const attempt = pad4(Math.floor(Math.random() * 10000));
     const ok = await tryClaim(attempt);
-    if(ok){
+
+    if (ok) {
       onClaim(attempt);
       genBtn.disabled = false;
       return;
     }
   }
-  setupMsg.textContent = "Could not find an open ID. Try again.";
+
+  setupMsg.textContent = "No free IDs found. Try again.";
   genBtn.disabled = false;
 }
 
-function onClaim(id){
+function onClaim(id) {
   myId = id;
   myIdEl.textContent = `ID: ${id}`;
   setupMsg.textContent = `Your ID is ${id}.`;
 
-  // Add conversation entry for yourself
-  addConversation(`user_${id}`, `You (${id})`);
-
+  addConversation("global", "Global chat");
   startGlobalListener();
 }
 
-/* -----------------------------
-    Conversation Handling
------------------------------- */
+/* ---------------------------------------------------
+   Conversation Helpers
+---------------------------------------------------- */
 
-function addConversation(value, label){
-  for(const opt of convSelect.options)
-    if(opt.value === value) return;
+function addConversation(value, label) {
+  for (const opt of convSelect.options)
+    if (opt.value === value) return;
 
   const opt = document.createElement("option");
   opt.value = value;
@@ -108,94 +116,102 @@ function addConversation(value, label){
   convSelect.appendChild(opt);
 }
 
-function targetConvKey(other){
-  const a = myId;
-  const b = other;
-  return (a < b) ? `${a}_${b}` : `${b}_${a}`;
+function convKey(a, b) {
+  return a < b ? `${a}_${b}` : `${b}_${a}`;
 }
 
-/* -----------------------------
-       Listening for messages
------------------------------- */
+/* ---------------------------------------------------
+   Listeners
+---------------------------------------------------- */
 
-function startGlobalListener(){
-  const refG = ref(db, "messages/global");
-  onValue(query(refG, orderByChild("ts"), limitToLast(200)), snap => {
-    if(convSelect.value !== "global") return;
-    renderMsgList(snap);
+let currentUnsub = null;
+
+function clearListener() {
+  if (typeof currentUnsub === "function") {
+    currentUnsub(); // detach listener
+    currentUnsub = null;
+  }
+}
+
+function startGlobalListener() {
+  clearListener();
+
+  const r = ref(db, "messages/global");
+  const q = query(r, orderByChild("timestamp"), limitToLast(200));
+
+  currentUnsub = onValue(q, snap => {
+    if (convSelect.value !== "global") return;
+    renderMessages(snap);
   });
 }
 
-function listenPM(otherId){
-  const path = targetConvKey(otherId);
+function listenPM(other) {
+  clearListener();
+
+  const path = convKey(myId, other);
   const r = ref(db, `messages/pm/${path}`);
+  const q = query(r, orderByChild("timestamp"), limitToLast(200));
 
-  onValue(query(r, orderByChild("ts"), limitToLast(200)), snap => {
-    if(convSelect.value !== `user_${otherId}`) return;
-    renderMsgList(snap);
+  currentUnsub = onValue(q, snap => {
+    if (convSelect.value !== `user_${other}`) return;
+    renderMessages(snap);
   });
 }
 
-/* -----------------------------
-       Rendering Messages
------------------------------- */
+/* ---------------------------------------------------
+   Render Messages (Format A)
+---------------------------------------------------- */
 
-function formatTS(ts){
-  return new Date(ts).toLocaleTimeString([], {
-    hour:"2-digit",
-    minute:"2-digit"
-  });
-}
-
-function renderMsgList(snap){
+function renderMessages(snap) {
   messagesEl.innerHTML = "";
 
   const list = [];
-  snap.forEach(c => list.push({...c.val()}));
+  snap.forEach(row => list.push(row.val()));
+  list.sort((a, b) => a.timestamp - b.timestamp);
 
-  list.sort((a,b)=> a.ts - b.ts);
-
-  list.forEach(m=>{
+  list.forEach(m => {
     const box = document.createElement("div");
-    box.classList.add("msg", m.fromId === myId ? "me" : "other");
+    box.classList.add("msg", m.from === myId ? "me" : "other");
+
     box.innerHTML = `
       <div>${m.text}</div>
-      <div class="meta">${m.fromId} → ${m.toId} · ${formatTS(m.ts)}</div>
+      <div class="meta">${m.from} → ${m.to} · ${new Date(m.timestamp).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</div>
     `;
+
     messagesEl.appendChild(box);
   });
 
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-/* -----------------------------
-        Sending Messages
------------------------------- */
+/* ---------------------------------------------------
+   Send Message (Format A)
+---------------------------------------------------- */
 
-sendForm.addEventListener("submit", e=>{
+sendForm.addEventListener("submit", e => {
   e.preventDefault();
-  if(!myId) return;
+  if (!myId) return;
 
   const text = textInput.value.trim();
-  if(!text) return;
+  if (!text) return;
 
-  let toId = "all";
   let path = "messages/global";
+  let to = "global";
 
-  if(convSelect.value !== "global"){
+  if (convSelect.value !== "global") {
     const other = convSelect.value.split("_")[1];
-    toId = other;
-    path = `messages/pm/${targetConvKey(other)}`;
+    to = other;
+    path = `messages/pm/${convKey(myId, other)}`;
   }
 
   push(ref(db, path), {
-    fromId: myId,
-    toId,
-    text,
-    ts: Date.now()
+    from: myId,
+    to: to,
+    text: text,
+    timestamp: Date.now()
   });
 
-  // keep user active
+  // update activity
   update(ref(db, `ids/${myId}`), {
     lastActive: Date.now()
   });
@@ -203,35 +219,37 @@ sendForm.addEventListener("submit", e=>{
   textInput.value = "";
 });
 
-/* -----------------------------
-       New PM conversation
------------------------------- */
+/* ---------------------------------------------------
+   Create New PM
+---------------------------------------------------- */
 
-newConvBtn.addEventListener("click", ()=>{
+newConvBtn.addEventListener("click", () => {
   const id = prompt("Enter 4-digit ID:");
-  if(!/^\d{4}$/.test(id)) return alert("Must be 4 digits.");
+  if (!/^\d{4}$/.test(id)) return alert("Must be 4 digits.");
 
-  // Does that ID exist?
-  onValue(ref(db, `ids/${id}`), snap=>{
-    if(!snap.exists()){
-      alert("That ID does not exist or expired.");
-      return;
-    }
+  onValue(ref(db, `ids/${id}`), snap => {
+    if (!snap.exists()) return alert("That ID does not exist.");
 
     addConversation(`user_${id}`, `Chat with ${id}`);
     convSelect.value = `user_${id}`;
     listenPM(id);
-  }, {onlyOnce:true});
+  }, { onlyOnce: true });
 });
 
-/* -----------------------------
-        Start process
------------------------------- */
+/* ---------------------------------------------------
+   UI interactions
+---------------------------------------------------- */
 
 genBtn.addEventListener("click", generateId);
-convSelect.addEventListener("change", ()=>{
+
+convSelect.addEventListener("change", () => {
   messagesEl.innerHTML = "";
-  if(convSelect.value.startsWith("user_")){
-    listenPM(convSelect.value.split("_")[1]);
+
+  if (convSelect.value === "global") {
+    startGlobalListener();
+  } else if (convSelect.value.startsWith("user_")) {
+    const other = convSelect.value.split("_")[1];
+    listenPM(other);
   }
 });
+
